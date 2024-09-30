@@ -382,9 +382,10 @@ module Make: Make = (F: Field.T, I: IArray with type t = F.t) => {
     // Combine the
     let dyn = 
       elements
-      ->Dynamic.switchMap(elements => { 
+      ->Dynamic.switchMap(elements => {
         elements
-        ->Dynamic.map( elements => {
+        ->Dynamic.map(
+            elements => {
           Rxjs.next(stateElements, elements)
           elements
           ->Array.map(e => e->Close.pack->Form.field)
@@ -404,7 +405,7 @@ module Make: Make = (F: Field.T, I: IArray with type t = F.t) => {
           })
         })
       })
-      ->Dynamic.startWith(Dynamic.return(first))
+      // ->Dynamic.startWith(Dynamic.return(first))
       ->Rxjs.pipe(Rxjs.shareReplay(1))
       ->Rxjs.pipe(Rxjs.takeUntil(complete))
 

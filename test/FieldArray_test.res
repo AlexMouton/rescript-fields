@@ -376,35 +376,75 @@ describe("FieldArray", () => {
       let context: Subject.context = {
         element: { inner: { username: {}, password: {} } }
       }
-
       describe("#makeDyn", () => {
-        describe("set product element", () => {
-          let test = () => {
-            let set = Rxjs.Subject.makeEmpty()
-            let {first, dyn} = Subject.makeDyn(context, None, set->Rxjs.toObservable, None)
-            let current: ref<'abc> = {contents: first}
+        let test = (init, fn) => {
+          let set = Rxjs.Subject.makeEmpty()
+          let {first, dyn} = Subject.makeDyn(context, init, set->Rxjs.toObservable, None)
+          let current: ref<'abc> = {contents: first}
 
-            let res = dyn->Dynamic.switchSequence->applyCurrent(current)->Dynamic.toPromise
+          let res = dyn->Dynamic.switchSequence->applyCurrent(current)->Dynamic.toHistory
 
-            first.pack.actions.add(Some({username: "set0", password: ""}))
+          first.pack.actions.add(Some({username: "set0", password: "set0"}))
 
-            Promise.sleep(500)
-            ->Promise.tap(_ =>
-              current.contents.pack.actions.index(0)
-              ->Option.forEach(index => {
-                index.inner.username.set("username")
-                index.inner.password.set("password")
+          Promise.sleep(500)
+          ->Promise.tap(_ =>
+            fn(current.contents.pack.actions)
+          )
+          ->Promise.delay(~ms=500)
+          ->Promise.tap(_ => current.contents.close())
+          ->Promise.void
+
+          res
+        }
+
+        describe("init Some", () => {
+          let init = Some([
+            { username: "firstusername",
+              password: "firstpassword",
+            },
+            { username: "secondusername",
+              password: "secondpassword"
+            }
+          ])
+
+          let setIndex = (index) => {
+            describe("set  index", () => {
+              let fn = (actions: Subject.actions<()>) => {
+                actions.index(index)
+                ->Option.forEach(index => index.set({username: "set1", password: "set1"}))
+              }
+              itPromise("sets first password", () => {
+                test(init, fn)->Promise.tap(res => {
+                  res->Array.leaf->Option.getUnsafe->Close.pack->Form.field->Subject.input->Array.get(index)->expect->toEqual(Some({username: "set1", password: "set1"}))
+                })
               })
-            )
-            ->Promise.delay(~ms=500)
-            ->Promise.tap(_ => current.contents.close())
-            ->Promise.void
-
-            res
+            })
           }
 
-          itPromise("sets first password", () => {
-            test()->Promise.tap(res => res->Close.pack->Form.field->Subject.input->expect->toEqual([{username: "username", password: "password"}]))
+          let setFieldIndex = (index) => {
+            describe("set index field", () => {
+              let fn = (actions: Subject.actions<()>) => {
+                actions.index(index)
+                ->Option.forEach(index => index.inner.username.set("fn"))
+              }
+              itPromise("sets username", () => {
+                test(init, fn)->Promise.tap(res => {
+                  res->Array.leaf->Option.getUnsafe->Close.pack->Form.field->Subject.input->Array.get(index)->expect->toEqual(Some({username: "fn", password: "secondpassword"}))
+                })
+              })
+            })
+          }
+
+          describe("element existing", () => {
+            let index = 1
+            setIndex(index)
+            setFieldIndex(index)
+          })
+
+          describe("element added", () => {
+            let index = 2
+            setIndex(index)
+            setFieldIndex(index)
           })
         })
       })
