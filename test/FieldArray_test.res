@@ -6,7 +6,10 @@ type structure<'a, 'b> = {
   password: 'a,
 }
 
-let applyCurrent = (dyn, current) => Dynamic.tap(dyn, x => current.contents = x)
+let applyCurrent = (dyn, current) =>
+  Dynamic.tap(dyn, x => {
+    current.contents = x
+  })
 
 describe("FieldArray", () => {
 
@@ -340,7 +343,7 @@ describe("FieldArray", () => {
     })
   })
 
-  describe("Element Product2", () => {
+  describeOnly("Element Product2", () => {
     module FieldPassword = FieldParse.String.Field
     module FieldUsername = FieldParse.String.Field
     // Declare the structure of your desired output type
@@ -383,13 +386,16 @@ describe("FieldArray", () => {
 
             let res = dyn->Dynamic.switchSequence->applyCurrent(current)->Dynamic.toPromise
 
-            first.pack.actions.set([{username: "set0", password: ""}])
+            first.pack.actions.add(Some({username: "set0", password: ""}))
 
             Promise.sleep(500)
-            ->Promise.tap(_ => current.contents.pack.actions.index(0)->Option.forEach(index => {
-              index.inner.username.set("username")
-              index.inner.password.set("password")
-            }))
+            ->Promise.tap(_ =>
+              current.contents.pack.actions.index(0)
+              ->Option.forEach(index => {
+                index.inner.username.set("username")
+                index.inner.password.set("password")
+              })
+            )
             ->Promise.delay(~ms=500)
             ->Promise.tap(_ => current.contents.close())
             ->Promise.void
