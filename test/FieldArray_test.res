@@ -1,5 +1,11 @@
 open Vitest
 
+@deriving(accessors)
+type structure<'a, 'b> = {
+  username: 'b,
+  password: 'a,
+}
+
 let applyCurrent = (dyn, current) => Dynamic.tap(dyn, x => current.contents = x)
 
 describe("FieldArray", () => {
@@ -272,11 +278,10 @@ describe("FieldArray", () => {
             let {first, dyn} = Subject.makeDyn(context(), None, set->Rxjs.toObservable, None)
             let current: ref<'ab> = {contents: first}
 
-            // This share prevents the observable from emitting everything twice?
             let res = dyn->Dynamic.switchSequence->applyCurrent(current)->Dynamic.toPromise
 
             first.pack.actions.set(["set0", "set1", "set2"])
-              
+
             Promise.sleep(500)
             ->Promise.tap(_ => current.contents.pack.actions.index(0)->Option.forEach(index => index.set("index") ))
             ->Promise.delay(~ms=500)
@@ -333,6 +338,70 @@ describe("FieldArray", () => {
         })
       })
     })
+  })
 
+  describe("Element Product2", () => {
+    module FieldPassword = FieldParse.String.Field
+    module FieldUsername = FieldParse.String.Field
+    // Declare the structure of your desired output type
+    // This is outside of Generic to make accessors more easily available
+
+    // Give fields a map from your output type to a generic container (tuple)
+    module Generic = {
+      type structure<'a, 'b> = structure<'a, 'b>
+
+      let order = (password, username)
+      let fromTuple = ((password, username)) => {username, password}
+    }
+
+    // Combine the Generic and child Fields to create a product field
+    module FieldElement = FieldProduct.Product2.Make(
+      Generic,
+      FieldUsername,
+      FieldPassword,
+    )
+
+    module Subject = FieldArray.Make(
+      FieldElement,
+      {
+        type t = FieldElement.t
+        let filter = FieldArray.filterIdentity
+      }
+    )
+
+    describe("context default", () => {
+      let context: Subject.context = {
+        element: { inner: { username: {}, password: {} } }
+      }
+
+      describe("#makeDyn", () => {
+        describe("set product element", () => {
+          let test = () => {
+            let set = Rxjs.Subject.makeEmpty()
+            let {first, dyn} = Subject.makeDyn(context, None, set->Rxjs.toObservable, None)
+            let current: ref<'abc> = {contents: first}
+
+            let res = dyn->Dynamic.switchSequence->applyCurrent(current)->Dynamic.toPromise
+
+            first.pack.actions.set([{username: "set0", password: ""}])
+
+            Promise.sleep(500)
+            ->Promise.tap(_ => current.contents.pack.actions.index(0)->Option.forEach(index => {
+              index.inner.username.set("username")
+              index.inner.password.set("password")
+            }))
+            ->Promise.delay(~ms=500)
+            ->Promise.tap(_ => current.contents.close())
+            ->Promise.void
+
+            res
+          }
+
+          itPromise("sets first password", () => {
+            test()->Promise.tap(res => res->Close.pack->Form.field->Subject.input->expect->toEqual([{username: "username", password: "password"}]))
+          })
+        })
+      })
+    })
   })
 })
