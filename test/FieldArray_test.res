@@ -343,9 +343,9 @@ describe("FieldArray", () => {
     })
   })
 
-  describeOnly("Element Product2", () => {
-    module FieldPassword = FieldParse.String.Field
-    module FieldUsername = FieldParse.String.Field
+  describeOnly("Element Product2 FieldString", () => {
+    module FieldPassword = FieldIdentity.String
+    module FieldUsername = FieldIdentity.String
     // Declare the structure of your desired output type
     // This is outside of Generic to make accessors more easily available
 
@@ -425,11 +425,121 @@ describe("FieldArray", () => {
             describe("set index field", () => {
               let fn = (actions: Subject.actions<()>) => {
                 actions.index(index)
-                ->Option.forEach(index => index.inner.username.set("fn"))
+                ->Option.forEach(index => index.inner.username.set("setfieldindex"))
               }
               itPromise("sets username", () => {
                 test(init, fn)->Promise.tap(res => {
-                  res->Array.leaf->Option.getUnsafe->Close.pack->Form.field->Subject.input->Array.get(index)->expect->toEqual(Some({username: "fn", password: "secondpassword"}))
+                  res->Array.leaf->Option.getUnsafe->Close.pack->Form.field->Subject.input->Array.get(index)->Option.map(x => x.username)->expect->toEqual(Some("setfieldindex"))
+                })
+              })
+            })
+          }
+
+          describe("element existing", () => {
+            let index = 1
+            setIndex(index)
+            setFieldIndex(index)
+          })
+
+          describe("element added", () => {
+            let index = 2
+            setIndex(index)
+            setFieldIndex(index)
+          })
+        })
+      })
+    })
+  })
+
+  describeOnly("Element Product2 FieldParse", () => {
+    module FieldPassword = FieldParse.String.Field
+    module FieldUsername = FieldParse.String.Field
+    // Declare the structure of your desired output type
+    // This is outside of Generic to make accessors more easily available
+
+    // Give fields a map from your output type to a generic container (tuple)
+    module Generic = {
+      type structure<'a, 'b> = structure<'a, 'b>
+
+      let order = (password, username)
+      let fromTuple = ((password, username)) => {username, password}
+    }
+
+    // Combine the Generic and child Fields to create a product field
+    module FieldElement = FieldProduct.Product2.Make(
+      Generic,
+      FieldUsername,
+      FieldPassword,
+    )
+
+    module Subject = FieldArray.Make(
+      FieldElement,
+      {
+        type t = FieldElement.t
+        let filter = FieldArray.filterIdentity
+      }
+    )
+
+    describe("context default", () => {
+      let context: Subject.context = {
+        element: { inner: { username: {}, password: {} } }
+      }
+      describe("#makeDyn", () => {
+        let test = (init, fn) => {
+          let set = Rxjs.Subject.makeEmpty()
+          let {first, dyn} = Subject.makeDyn(context, init, set->Rxjs.toObservable, None)
+          let current: ref<Close.t<Form.t<Subject.t, Subject.actions<unit>>>> = {contents: first}
+
+          let res = dyn->Dynamic.switchSequence->applyCurrent(current)->Dynamic.toHistory
+
+          first.pack.actions.add(Some({username: "usernameadd", password: "passwordadd"}))
+
+          Promise.sleep(500)
+          ->Promise.tap(_ =>
+            fn(current.contents.pack.actions)
+          )
+          ->Promise.delay(~ms=500)
+          ->Promise.tap(_ => current.contents.close())
+          ->Promise.void
+
+          res
+        }
+
+        describe("init Some", () => {
+          let init = Some([
+            { username: "usernameinit0",
+              password: "passwordinit0",
+            },
+            { username: "usernameinit1",
+              password: "passwordinit1"
+            }
+          ])
+
+          let setIndex = (index) => {
+            describe("set  index", () => {
+              let new = {username: "usernamesetindex", password: "usernamesetindex"}
+              let fn = (actions: Subject.actions<()>) => {
+                actions.index(index)
+                ->Option.forEach(index => index.set(new))
+              }
+              itPromise("sets first", () => {
+                test(init, fn)->Promise.tap(res => {
+                  res->Array.leaf->Option.getUnsafe->Close.pack->Form.field->Subject.input->Array.get(index)->expect->toEqual(Some(new))
+                })
+              })
+            })
+          }
+
+          let setFieldIndex = (index) => {
+            let username = "setfieldindex"
+            describe("set index username", () => {
+              let fn = (actions: Subject.actions<()>) => {
+                actions.index(index)
+                ->Option.forEach(index => index.inner.username.set(username))
+              }
+              itPromise("sets username", () => {
+                test(init, fn)->Promise.tap(res => {
+                  res->Array.leaf->Option.getUnsafe->Close.pack->Form.field->Subject.input->Array.get(index)->Option.map(x => x.username)->expect->toEqual(Some(username))
                 })
               })
             })
